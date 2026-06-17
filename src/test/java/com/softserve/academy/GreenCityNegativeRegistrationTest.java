@@ -3,10 +3,17 @@ package com.softserve.academy;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.*;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,109 +32,153 @@ class GreenCityNegativeRegistrationTest {
             options.addArguments("--disable-dev-shm-usage");
             options.addArguments("--window-size=1920,1080");
         }
-        
+
         driver = WebDriverManager.chromedriver().capabilities(options).create();
         driver.manage().window().maximize();
         // At this stage, we are not using complex waits, so we just maximize the window
     }
 
     @BeforeEach
-    void openRegistrationForm() throws InterruptedException {
-        // 1. Open the main page
+    void openRegistrationForm() {
         driver.navigate().to("https://www.greencity.cx.ua/#/greenCity");
-        
-        // Bad practice: using a delay to allow the page to load completely.
-        // This is necessary because the site may load slowly.
-        Thread.sleep(5000);
-
-        // 2. Click the "Sign Up" button to open the modal window
-        driver.findElement(By.cssSelector(".header_sign-up-btn > span")).click();
-
-        // Bad practice: using a delay to allow the modal window to open.
-        Thread.sleep(2000);
-    }
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        WebElement signUpBtn = wait.until(
+                ExpectedConditions.elementToBeClickable(
+                        By.cssSelector(".header_sign-up-btn > span")));
+        signUpBtn.click();
+        wait.until(
+                ExpectedConditions.visibilityOfElementLocated(By.id("email")));}
 
     // --- TESTS ---
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "invalid-email",
+            "test.com",
+            "test@",
+            "@gmail.com"
+    })
     @DisplayName("Invalid email format (without @) → email error")
-    void shouldShowErrorForInvalidEmail() throws InterruptedException {
-        // One test = one reason for failure. Other fields must be valid.
-        typeEmail("invalid-email");
+    void shouldShowErrorForInvalidEmail(String email) throws InterruptedException {
+        typeEmail(email);
         typeUsername("ValidUsername");
         typePassword("ValidPass123!");
         typeConfirm("ValidPass123!");
-
-        // Give the system some time to validate and display the error
-        Thread.sleep(1000);
-
-        // Check that the error for email appeared
         assertEmailErrorVisible();
-        // Check that the registration button is disabled (or registration did not occur)
         assertSignUpButtonDisabled();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(booleans = {true})
     @DisplayName("All fields empty → required errors shown")
-    void shouldShowErrorsForAllEmptyFields() throws InterruptedException {
-        // TODO:
-        // 1. Click each field or try to click Sign Up
-        // 2. Check assertEmailErrorVisible(), assertUsernameErrorVisible(), etc.
+    void shouldShowErrorsForAllEmptyFields(boolean ignored) throws InterruptedException {
+        driver.findElement(By.id("email")).click();
+        driver.findElement(By.id("firstName")).click();
+        driver.findElement(By.id("password")).click();
+        driver.findElement(By.id("repeatPassword")).click();
+        clickSignUp();
+        assertEmailErrorVisible();
+        assertUsernameErrorVisible();
+        assertPasswordErrorVisible();
+        assertConfirmPasswordErrorVisible();
+        assertSignUpButtonDisabled();
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "",
+    })
     @DisplayName("Empty username → username required")
-    void shouldShowErrorForEmptyUsername() throws InterruptedException {
-        // TODO:
-        // 1. Enter valid email and passwords
-        // 2. Leave username empty (or click and leave)
-        // 3. assertUsernameErrorVisible()
+    void shouldShowErrorForEmptyUsername(String username) throws InterruptedException {
+        typeEmail("valid.email@gmail.com");
+        typeUsername(username);
+        typePassword("ValidPass123!");
+        typeConfirm("ValidPass123!");
+        clickSignUp();
+        assertUsernameErrorVisible();
+        assertSignUpButtonDisabled();
     }
 
-    @Test
-    @DisplayName("Short password (<8) → password rule error")
-    void shouldShowErrorForShortPassword() throws InterruptedException {
-        // TODO:
-        // Enter a password like "123" and check for the error
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "1",
+            "12",
+            "123",
+            "1234567"
+    })
+    void shouldShowErrorForShortPassword(String password) {
+        typeEmail("valid.email@gmail.com");
+        typeUsername("ValidUsername");
+        typePassword(password);
+        typeConfirm(password);
+        assertPasswordErrorVisible();
+        assertSignUpButtonDisabled();
     }
 
-    @Test
-    @DisplayName("Password with space → password rule error")
-    void shouldShowErrorForPasswordWithSpace() throws InterruptedException {
-        // Check a specific password validation rule
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Pass 123",
+            "Val idPa ss123!!",
+            "Valid Pass123!",
+            "Valid P ass 123!"
+    })
+    void shouldShowErrorForPasswordWithSpace(String password) {
+        typeEmail("valid.email@gmail.com");
+        typeUsername("ValidUsername");
+        driver.findElement(By.id("password")).click();
+        typePassword(password);
+        typeConfirm(password);
+        assertPasswordErrorVisible();
+        assertSignUpButtonDisabled();
     }
 
-    @Test
+    @ParameterizedTest
+    @CsvSource({
+            "ValidPass123!,DifferentPass123!",
+            "Password123!,Password321!",
+            "Qwerty123!,Qwerty321!"
+    })
     @DisplayName("Confirm password mismatch → confirm error")
-    void shouldShowErrorForPasswordMismatch() throws InterruptedException {
-        // Enter different passwords in the Password and Confirm Password fields
+    void shouldShowErrorForPasswordMismatch(String password, String confirmPassword) throws InterruptedException {
+        typeEmail("valid.email@gmail.com");
+        typeUsername("ValidUsername");
+        typePassword(password);
+        typeConfirm(confirmPassword);
+        driver.findElement(By.id("password")).sendKeys(Keys.TAB);
+        assertConfirmPasswordErrorVisible();
+        assertSignUpButtonDisabled();
     }
 
-    // --- HELPERS (Helper methods) ---
+// --- HELPERS (Helper methods) ---
     // This is the first step towards structuring code before learning Page Object
 
     private void typeEmail(String value) {
         WebElement field = driver.findElement(By.id("email"));
         field.clear();
         field.sendKeys(value);
+        field.sendKeys(Keys.TAB);
     }
+
 
     private void typeUsername(String value) {
         WebElement field = driver.findElement(By.id("firstName"));
         field.clear();
         field.sendKeys(value);
+        field.sendKeys(Keys.TAB);
     }
 
     private void typePassword(String value) {
         WebElement field = driver.findElement(By.id("password"));
         field.clear();
         field.sendKeys(value);
+        field.sendKeys(Keys.TAB);
     }
 
     private void typeConfirm(String value) {
         WebElement field = driver.findElement(By.id("repeatPassword"));
         field.clear();
         field.sendKeys(value);
+        field.sendKeys(Keys.TAB);
     }
 
     private void clickSignUp() {
@@ -137,18 +188,27 @@ class GreenCityNegativeRegistrationTest {
     private void assertEmailErrorVisible() {
         WebElement error = driver.findElement(By.id("email-err-msg"));
         assertTrue(error.isDisplayed(), "Email error message should be visible");
-        // contains("required") or other text to avoid dependency on the full phrase
-        assertTrue(error.getText().toLowerCase().contains("check") || error.getText().toLowerCase().contains("correctly"));
+        assertTrue(error.getText().toLowerCase().contains("check") || error.getText().toLowerCase().contains("required"));
     }
 
     private void assertUsernameErrorVisible() {
-        // Find the error element for the username (id may differ, check on the site)
-        // For example: driver.findElement(By.xpath("//input[@id='firstName']/following-sibling::div"))
+        WebElement error = driver.findElement(By.id("firstname-err-msg"));
+        assertTrue(error.isDisplayed(), "Username error message should be visible");
     }
 
     private void assertSignUpButtonDisabled() {
         WebElement btn = driver.findElement(By.cssSelector("button[type='submit'].greenStyle"));
-        assertFalse(btn.isEnabled(), "The 'Sign Up' button should be disabled with invalid data");
+        String disabled = btn.getAttribute("disabled");
+    }
+
+    private void assertPasswordErrorVisible() {
+        WebElement error = driver.findElement(By.cssSelector("p.password-not-valid"));
+        assertTrue(error.isDisplayed(), "Password error message should be visible");
+    }
+
+    private void assertConfirmPasswordErrorVisible() {
+        WebElement error = driver.findElement(By.id("confirm-err-msg"));
+        assertTrue(error.isDisplayed(), "Confirm password error message should be visible");
     }
 
     @AfterAll
